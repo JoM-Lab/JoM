@@ -1,0 +1,10 @@
+tabulate
+rauth
+autopep8
+bottle
+wordcloud
+git+https://github.com/gevent/gevent
+git+https://github.com/lepture/opencc-python
+# pytg
+# DictObject # by pytg
+# dropbox

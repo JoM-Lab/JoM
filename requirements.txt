@@ -1,0 +1,10 @@
+ipython
+pep8
+pytz
+requests
+SQLAlchemy
+pillow
+scipy
+matplotlib
+cython # by gevent
+greenlet # by gevent
