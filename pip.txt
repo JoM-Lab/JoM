@@ -3,6 +3,7 @@ rauth
 autopep8
 bottle
 wordcloud
+snownlp
 git+https://github.com/gevent/gevent
 git+https://github.com/lepture/opencc-python
 # pytg

@@ -15,6 +15,15 @@ alphanum = set(string.ascii_letters + string.digits)
 
 
 def freq(texts, limit=400, p=12):
+    '''Find the most frequent words and their frequencies in a set of texts.
+
+    :param texts: a list of strings
+    :type texts: List[str]
+    :param int limit: a soft limit to cut off some words
+    :param int p: longest word length
+    :return: list of words and frequencies
+    :rtype: List[(str, int)]
+    '''
     cnt = Counter()
     cntE = Counter()
     for l in texts:

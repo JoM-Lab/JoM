@@ -6,7 +6,6 @@ import gevent
 import opencc
 from gevent import Greenlet
 from datetime import datetime
-from rauth import OAuth1Session
 from db import Tweet, Follow, new_session
 from format import Formatter
 from sqlalchemy import func
@@ -14,15 +13,9 @@ import time
 import os
 import re
 import socket
+from twitter import twitter
 
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 1)
-
-globals().update(json.load(open('secret.json')))
-
-twitter = OAuth1Session(consumer_key=CONSUMER_KEY,
-                        consumer_secret=CONSUMER_SECRET,
-                        access_token=ACCESS_KEY,
-                        access_token_secret=ACCESS_SECRET)
 
 params = dict(screen_name='', count=200,
               exclude_replies=False, include_rts=True)
@@ -33,34 +26,52 @@ fparams = dict(screen_name='', count=200, stringify_ids=True,
 formatter = None
 follow_dict = {}
 keywords = json.load(open('keywords.json'))
-notify_sock = None
 
 
 def notify(msg):
-    global notify_sock
-    if notify_sock is None:
-        try:
-            notify_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            notify_sock.connect("/tmp/jom")
-        except:
-            notify_sock = None
-            print("[socket error]: cannot send notification")
-            return False
-    notify_sock.send(msg.encode("utf8"))
-    return True
+    """Send message through socket. It is used to communicate with polling
+
+    :param string msg: message to send through socket
+    :return: if message is sent successfully
+    :rtype: bool
+    """
+    try:
+        notify_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        notify_sock.connect("/tmp/jom")
+        notify_sock.send(msg.encode("utf8"))
+        notify_sock.close()
+        return True
+    except:
+        print("[socket error]: cannot send notification")
+        return False
 
 
 def save_follow_dict():
+    """Save following/follower status to a local JSON file
+    """
     json.dump(follow_dict, open('follow.json', 'w'))
     # print('saved follow.json')
 
 
 def time_to_stamp(time):
+    """convert time string to Unix timestamp
+
+    :param string time: time representation
+    :return: timestamp
+    :rtype: int
+    """
+
     ''' "Fri Aug 29 12:23:59 +0000 2014" '''
     return int(datetime.strptime(time, '%a %b %d %X %z %Y').timestamp())
 
 
 def to_record(tweet):
+    """Convert a tweet of type dict to Tweet database instance
+
+    :param dict tweet: a tweet
+    :return: Tweet database instance
+    :rtype: Tweet
+    """
     if 'retweeted_status' in tweet:
         typ = 'rt'
     elif tweet['in_reply_to_status_id']:
@@ -70,23 +81,7 @@ def to_record(tweet):
     else:
         typ = 'tweet'
     timestamp = time_to_stamp(tweet['created_at'])
-    entities = tweet.get('entities', {})
-    urls = entities.get('urls', [])
-    media = entities.get('media', [])
-
-    rep = {}
-    for u in urls + media:
-        idx = tuple(u['indices'])
-        if idx not in rep:
-            rep[idx] = []
-        rep[idx].append(u.get('media_url', u['expanded_url']))
-
-    text = list(opencc.convert(tweet['text']))
-    for idx in sorted(rep.keys(), reverse=True):
-        st, ed = idx
-        text[st:ed] = ' '.join(rep[idx])
-    text = ''.join(text)
-
+    text = opencc.convert(tweet['text'])
     t = Tweet(id=int(tweet['id']), sender=tweet['user']['screen_name'].lower(),
               type=typ, timestamp=int(timestamp), tweet=json.dumps(tweet),
               text=text)
@@ -94,6 +89,16 @@ def to_record(tweet):
 
 
 def f_record(user, action, target_id, target_name, timestamp):
+    """Convert to Follow database record
+
+    :param user: string | int
+    :param action: string
+    :param target_id: string | int
+    :param target_name: string
+    :param timestamp: int
+    :return: Follow database instance
+    :rtype: Follow
+    """
     f = Follow(timestamp=int(timestamp), person=user,
                target_id=int(target_id), target_name=target_name,
                action=action)
@@ -101,6 +106,14 @@ def f_record(user, action, target_id, target_name, timestamp):
 
 
 def get_tweets(user, max_id=None):
+    """Get tweets from one's timeline
+
+    :param string user: target's Twitter screen name
+    :param max_id: the id of last tweet in range, defaults to be None
+    :type max_id: int|None
+    :return: result from API call, a list of tweets
+    :rtype: json
+    """
     p = params.copy()
     p['screen_name'] = user
     if max_id is not None:
@@ -111,6 +124,13 @@ def get_tweets(user, max_id=None):
 
 
 def get_f(user, ftype):
+    """Get one's follower/following
+
+    :param string user: target's screen name
+    :param string ftype: follower or following
+    :return: a mapping from follower/following id to screen name
+    :rtype: dict
+    """
     p = fparams.copy()
     p['screen_name'] = user
     f = []
@@ -141,6 +161,17 @@ class FMonitor(Greenlet):
         self.follow = follow_dict[self.user]
 
     def diff(self, following, follower):
+        """Calculate following/follower change using basic
+        set difference operation
+
+        unfo = last_following - current_following (people unfoed by target)
+        fo =   current_following - last_following (people foed by target)
+        unfoed = last_follower - current_follower (people who unfoed target)
+        foed = current_follower - last_follower (people who foed target)
+
+        :param following: following id
+        :param follower: follower id
+        """
         last_following = self.follow['following']
         last_follower = self.follow['follower']
         unfo_ids = last_following.keys() - following.keys()
@@ -188,19 +219,39 @@ class TMonitor(Greenlet):
         self.session = session
 
     def get_max_id(self):
+        """Get maximum tweet id from a list of tweets
+
+        :return: maximum id
+        :rtype: int
+        """
         max_id = self.session.query(func.max(Tweet.id))\
-                             .filter(Tweet.sender == self.user).first()[0]
-        return max_id or 0
+                             .filter(Tweet.sender == self.user).first()
+        return max_id[0] or 0  # 0 for target's first time
 
     @staticmethod
     def match_tweet(patterns, text):
-        for i, pats in enumerate(patterns):
-            matches = [re.search(pat, text) for pat in pats]
-            if matches and all(matches):
-                return True, i
-        return False, -1
+        """match tweets using patterns
+
+        A list of pattern has form ["a", "-b", "-c"], which
+        means matching tweet text containing "a", but not "b" or "c"
+
+        :param patterns: List of patterns
+        :type patterns: List[List[str]]
+        :param str text: text to be matched
+        :return: boolean flag if match exists and the corresponding pattern
+        :rtype: bool * List[str]
+        """
+        for pats in patterns:
+            positive = [p for p in pats if p[0] != '-']
+            negative = [p[1:] for p in pats if p[0] == '-']
+            if all(re.search(p, text, re.I) for p in positive) and\
+                    not any(re.search(p, text, re.I) for p in negative):
+                return True, pats
+        return False, None
 
     def update(self):
+        """Update tweets
+        """
         global formatter, keywords
 
         maxid = self.get_max_id()
@@ -214,14 +265,16 @@ class TMonitor(Greenlet):
             all_tweets.extend([t for t in tweets if t['id'] > maxid])
 
         kws = keywords.get(self.user, [])
-        patterns = [[re.compile(i) for i in l] for l in kws]
         for t in all_tweets:
             record = to_record(t)
             tweet_text = record.text
-            match, index = self.match_tweet(patterns, tweet_text)
+            match, pats = self.match_tweet(kws, tweet_text)
+            # notify polling when tweets match certain group of keyword
             if record.type != 'quote' and record.type != 'rt' and match:
-                msg = formatter.format_kw_notif(kws[index], record)
-                notify(msg)
+                msg = formatter.format_kw_notif(pats, record)
+                # only preview when tweet is associated with image
+                preview = 'twimg' in record.text
+                notify(json.dumps(dict(message=msg, preview=preview, markdown=True)))
             self.session.add(record)
         self.session.commit()
 
@@ -238,6 +291,9 @@ class TMonitor(Greenlet):
 
 
 class KeywordsWatcher(Greenlet):
+    """Constantly update keywords from keywords.json
+
+    """
     def __init(self):
         Greenlet.__init(self)
 
@@ -258,6 +314,9 @@ class KeywordsWatcher(Greenlet):
 
 
 class Updater:
+    """Update tweets and following/follower of all targets
+
+    """
 
     def __init__(self, config='config.json'):
         global formatter
@@ -283,7 +342,7 @@ class Updater:
             t_itv = self.config['victims'][u]['interval']
             if t_itv:
                 used += 15 * 60 / t_itv
-                g = TMonitor(u, t_itv, self.session)
+                g = TMonitor(u, t_itv, self.session)  # start tweets monitor
                 tasks.append(g)
                 g.start()
 
@@ -294,7 +353,7 @@ class Updater:
                     follow_dict[u] = dict(following=get_f(u, 'following'),
                                           follower=get_f(u, 'follower'))
                     print("initilized {}'s following/follower status".format(u))
-                g = FMonitor(u, f_itv, self.session)
+                g = FMonitor(u, f_itv, self.session)  # start following/follower monitor
                 tasks.append(g)
                 g.start()
 

@@ -1,6 +1,6 @@
 s - /s person [regex1] [-regex2] [!c2] [!p2] [!i]
 st - s but orig only
-cnt - /cnt person keyword1[|keyword2] [keyword3]
+cnt - /cnt person [keywords]
 end - end current session and hide the keyboard
 rand - /rand person
 randt - rand but orig only
@@ -9,10 +9,12 @@ sleep - /sleep [7d]
 remember - /remember person words
 quote - /quote person  [regex1] [-regex2] [!c2] [!p2]
 randq - /randq person - random quote forom a given person
-say - say some word
 config - show configuration
-ff - /ff person [1d]
-fff - /fff person [1d]
+ff - /ff person [1d] [!unfo|!fo|!foed|!unfoed]
+fff - /fff person [1d] [!unfo|!fo|!foed|!unfoed]
 freq - /freq person [7d]
 wordcloud - /wordcloud person
+watch - /watch person +/- [keywords]
+trend - /trend person [7d] [1d] [keywords]
+punchcard - /pc person [7d]
 help - baka!
