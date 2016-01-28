@@ -17,7 +17,7 @@ def init(k=4):
     all_tweets = []
     session = new_session('./data.db')
     for i in session.query(Tweet.text)\
-            .filter(Tweet.sender == 'user')\
+            .filter(Tweet.sender == 'masked')\
             .filter(Tweet.type == 'tweet'):
         text = i.text
         text = re.sub('\n', ' ', text)

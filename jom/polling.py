@@ -5,9 +5,10 @@ import json
 import opencc
 import asyncio
 import requests
-from query import Query
-from sender import Sender
-from resp import Resp
+from requests.exceptions import ConnectionError
+from .query import Query
+from .sender import Sender
+from .resp import Resp
 
 
 class Telegram:
@@ -42,7 +43,7 @@ class Telegram:
         '''
         @asyncio.coroutine
         def notify(reader, _writer):
-            message = yield from reader.read(1024)
+            message = yield from reader.read(8196)
             if message:
                 message = message.decode('utf8')
                 self.debug('sock', 'recieved ' + message)
@@ -72,21 +73,37 @@ class Telegram:
             except ValueError:
                 self.debug("ERROR", req.text)
                 continue
+            except ConnectionError as e:
+                self.debug("ERROR", str(e))
+                continue
             if not j['ok'] or not j['result']:
                 continue
             self.debug("receive", json.dumps(j))
+            # update offset for next `/getUpdates`
+            offset = max([r['update_id'] + 1 for r in j['result']])
             for r in j['result']:
-                m = r['message']
-                self.debug("message", json.dumps(m))
-                mid = m['message_id']
-                cid = m['chat']['id']
-                if cid in self.allowed and 'text' in m and m['text'][0] == '/':
-                    m['text'] = opencc.convert(m['text'])
-                    resp = self.q.query(cid, m['text'][1:])
-                    self.sender.send_resp(cid, resp, mid)
-                else:
-                    self.sender.send_resp(cid, Resp(message='mew?'))
-                offset = r['update_id'] + 1
+                # process inline queries
+                if 'inline_query' in r:
+                    q = r['inline_query']
+                    cid = q['from']['id']
+                    if cid in self.allowed:
+                        resp = self.q.inline(q['id'], q['offset'] or 0, q['query'])
+                        self.sender.send_resp(cid, resp)
+
+                elif 'chosen_inline_result' in r:
+                    continue  # TODO: ???
+
+                else:  # normal messages
+                    m = r['message']
+                    self.debug("message", json.dumps(m))
+                    mid = m['message_id']
+                    cid = m['chat']['id']
+                    if cid in self.allowed and 'text' in m and m['text'][0] == '/':
+                        m['text'] = opencc.convert(m['text'])
+                        resp = self.q.query(cid, m['text'][1:])
+                        self.sender.send_resp(cid, resp, mid)
+                    else:
+                        self.sender.send_resp(cid, Resp(message='mew?'))
 
     def run(self):
         '''

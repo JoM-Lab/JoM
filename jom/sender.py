@@ -33,28 +33,34 @@ class Sender:
         :type resp: Resp
         :param mid: reply to which message
         :type mid: int | None
+        :rtype: bool
         '''
 
         # must be string
         keyboard = json.dumps(resp.keyboard or self.hide_keyboard)
-        if resp.message is not None:
+        if resp.inline is not None:
+            return self.request('answerInlineQuery', resp.inline)
+
+        elif resp.message is not None:
             data = dict(chat_id=cid, text=resp.message, reply_to_message_id=mid,
                         disable_web_page_preview=not resp.preview,
                         reply_markup=keyboard)
             if resp.markdown:
                 data['parse_mode'] = "Markdown"
-            self.request('sendMessage', data)
+            return self.request('sendMessage', data)
 
         elif resp.fileobj is not None:
             if resp.fileobj.name.endswith('.png'):
                 data = dict(chat_id=cid, reply_markup=keyboard)
                 files = dict(photo=resp.fileobj)
-                self.request('sendPhoto', data, files)
+                return self.request('sendPhoto', data, files)
             else:
                 self.debug("unknown file type:", resp.fileobj.name)
+                return False
 
         else:
             self.debug("unknown send_resp:", (resp.message, resp.fileobj))
+            return False
 
     def request(self, method, dt, fl=None):
         '''
@@ -63,6 +69,7 @@ class Sender:
         :type dt: Dict[str, str]
         :param fl: file objects to send
         :type fl: Dict[str, File]
+        :rtype: bool
         '''
         url = self.prefix + '/' + method
         self.debug(method, dt)
@@ -72,7 +79,10 @@ class Sender:
             result = result.json()
             if not result['ok']:
                 err_msg = 'Error {}: {}'.format(result['error_code'], result['description'])
-                requests.post(self.prefix + '/sendMessage',
-                              data=dict(chat_id=dt['chat_id'], text=err_msg))
+                if 'chat_id' in dt:
+                    requests.post(self.prefix + '/sendMessage',
+                                  data=dict(chat_id=dt['chat_id'], text=err_msg))
+            return result['ok']
         except Exception as e:
             self.debug('error in request', str(e))
+            return False

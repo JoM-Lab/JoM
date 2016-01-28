@@ -64,7 +64,7 @@ end
 
 def load_quotes_from_db
   db = Sequel.connect("sqlite://#{DB_PATH}", readonly: true)
-  tweets = db[:tweets].where(sender: 'user').order(Sequel.desc(:timestamp))
+  tweets = db[:tweets].where(sender: 'masked').order(Sequel.desc(:timestamp))
   quotes = []
   tweets.select(:text).first(NUM_TWEETS).each do |tweet|
     tweet[:text].gsub!(%r!https?://[^s]+!, '')
@@ -76,7 +76,7 @@ end
 
 def match_keyword?(sentence)
   unless @keywords
-    json ||= JSON.parse(File.read(KWD_PATH))['user']
+    json ||= JSON.parse(File.read(KWD_PATH))['masked']
     @keywords = json.map do |kw|
       Regexp.new(kw[0])
     end

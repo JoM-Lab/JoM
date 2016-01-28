@@ -3,7 +3,7 @@ from itertools import takewhile
 
 
 class Parser:
-    """ Parse coming request """
+    """ Parse coming request. """
 
     def __init__(self):
         self.last_timestamp = 0
@@ -37,10 +37,10 @@ class Parser:
             return 'remember', (author, ' '.join(qs))
         elif trunks[0] == 'forget':
             return 'forget', self.parse_n_more(2)(trunks)
-        elif trunks[0] == 'ff':
-            return 'ff', self.parse_ff(trunks, default='1d')
-        elif trunks[0] == 'fff':
-            return 'fff', self.parse_fff(trunks, default='1d')
+        elif trunks[0] == 'f':
+            return 'f', self.parse_f(trunks, default='1d')
+        elif trunks[0] == 'fs':
+            return 'fs', self.parse_n_more(2)(trunks)
         elif trunks[0] == 'quote':
             return 'quote', self.parse_n_more(2)(trunks)
         elif trunks[0] == 'randq':
@@ -50,23 +50,28 @@ class Parser:
         elif trunks[0] == 'wordcloud':
             return 'wordcloud', self.parse_n(2)(trunks)
         elif trunks[0] == 'help':
-            return 'help', None
+            return 'help', self.parse_help(trunks)
         elif trunks[0] == 'trend':
             return 'trend', self.parse_trend(trunks)
         elif trunks[0] == 'thread':
             return 'thread', self.parse_n(2)(trunks)
         elif trunks[0] == 'pc' or trunks[0] == 'punchcard':
             return 'punchcard', self.parse_timed(trunks, default='7d')
+        elif trunks[0] == 'deleted':
+            return 'deleted', self.parse_n_more(2)(trunks)
+        elif trunks[0] == 'ids':
+            return 'ids', self.parse_n_more(2)(trunks)
+        elif trunks[0] == 'bio':
+            return 'bio', self.parse_timed(trunks, default='7d')
         else:
             raise Exception('no cmd ' + trunks[0])
-
 
     @staticmethod
     def unit_to_seconds(unit):
         """Turn time unit to seconds
 
         :param string unit: 'h', 'd', 'w', or 'm', standing for
-        'hour', 'day', 'week', and 'month'.
+                            'hour', 'day', 'week', and 'month'.
         :return: seconds
         :rtype: int
         """
@@ -107,8 +112,8 @@ class Parser:
     @staticmethod
     def filter_config(trunks, allowed):
         """Separate regular command argument and config
-        For example, for command "/fff j 7d !unfo",
-        "fff", "j", "7d" are regular command arguments and
+        For example, for command "/f j 7d !unfo",
+        "f", "j", "7d" are regular command arguments and
         "!unfo" is config. In this case, we only want result of unfo.
 
 
@@ -160,7 +165,7 @@ class Parser:
             raise Exception('bad parameters')
 
     def parse_trend(self, trunks):
-        """Parse trend command
+        """Parse trend command.
         For example, for command "/trend j 2w 1w a b c",
         "2w" is the time range we want to query,
         "1w" is the interval or granularity.
@@ -176,8 +181,8 @@ class Parser:
 
         :param List[str] trunks: list of trunks of command
         :return: a tuple containing username of type string, time range
-        in seconds, time interval in seconds, list of keywords,
-        time range and interval of type string
+                 in seconds, time interval in seconds, list of keywords,
+                 time range and interval of type string
         :rtype: string * int * int * List[str] * List[str]
         """
         try:
@@ -188,9 +193,9 @@ class Parser:
                     raise Exception("Bad time interval")
                 else:
                     return trunks[1], \
-                           self.to_seconds(trunks[2]), \
-                           self.to_seconds(trunks[3]), \
-                           trunks[4:], [trunks[2], trunks[3]]
+                        self.to_seconds(trunks[2]), \
+                        self.to_seconds(trunks[3]), \
+                        trunks[4:], [trunks[2], trunks[3]]
             else:
                 raise Exception('not enough parameters')
         except Exception:
@@ -201,26 +206,13 @@ class Parser:
             else:
                 raise Exception('not enough parameters')
 
-    def parse_ff(self, trunks, *, default='24h'):
-        """Parser ff command
-        A valid command can be "/ff j 7d !unfo !fo"
-
-        :param List[str] trunks: list of trunks of command
-        :param string default: default time range, which is 24 hours
-        :return: a tuple of result of ``parse_timed`` concatenated with config dictionary
-        :rtype: string * string * int * dict
-        """
-        trunks, cfg = self.filter_config(trunks, 'fo unfo foed unfoed')
-        res = self.parse_timed(trunks, default=default)
-        return res + (cfg,)
-
-    def parse_fff(self, trunks, *, default='24h'):
-        """Parser fff command
-        A valid command can be "/fff j 7d !unfo !fo !p2"
+    def parse_f(self, trunks, *, default='24h'):
+        """Parser f command
+        A valid command can be "/f j 7d !unfo !fo !p2"
 
         :param List[str] trunks: list of trunk of command
         :param str default: default time range, which is 24 hours
-        :return : a tuple of result of ``parse_timed`` concatenated with config dictionary
+        :return: a tuple of result of ``parse_timed`` concatenated with config dictionary
         :rtype: string * string * int * dict
         """
         trunks, cfg = self.filter_config(trunks, 'p fo unfo foed unfoed')
@@ -276,3 +268,20 @@ class Parser:
             else:
                 raise Exception('not {} and more parameters'.format(n))
         return func
+
+    @staticmethod
+    def parse_help(trunks):
+        '''Parse help command
+        A valid help could be "/help trend" or "/help"
+
+        :param trunks: List[str] trunks: list of trunks of command
+        :return: command name or None if user wants to list all commands
+        :rtype: str | None
+        '''
+        if len(trunks) <= 2:
+            if len(trunks) == 1:
+                return None
+            else:
+                return trunks[1]
+        else:
+            raise Exception('too many parameters')

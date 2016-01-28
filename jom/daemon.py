@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-import os
+from gevent import monkey
+monkey.patch_all()
 import sys
 import time
 import shlex
 import bottle
 import subprocess
 
-UPDATE_CMD = 'python src/update.py'
-POLLING_CMD = 'python src/polling.py'
+UPDATE_CMD = 'python -m jom.update'
+POLLING_CMD = 'python -m jom.polling'
+DOCS_CMD = 'cd docs; make html'
 # cmd to get the current branch
 BRANCH_CMD = 'git branch | grep "*" | cut -d " " -f 2'
 # cmd to get the newest commit log
@@ -74,6 +76,9 @@ def check_status():
         if polling_err_msg == '':  # haven't pull out
             polling_err_msg = polling_proc.stderr.read().decode('utf-8')
 
+    # regenerate docs
+    subprocess.getstatusoutput(DOCS_CMD)
+
     return update_status, polling_status
 
 
@@ -104,7 +109,18 @@ def hook():
     return '{} {}'.format(*check_status())
 
 
+@bottle.route('/docs/<p:re:.*>')
+@bottle.auth_basic(lambda username, password:
+        username == 'jom' and password == 'moj')
+def serve_docs(p=''):
+    if not p:
+        p = 'index.html'
+    return bottle.static_file(p, root='docs/_build/html')
+
+
 @bottle.route('/')
+@bottle.auth_basic(lambda username, password:
+        username == 'jom' and password == 'moj')
 def main():
     '''
     Display HTML.
@@ -124,6 +140,7 @@ update proc: {update_status}<br/>
 <pre>{update_err_msg}</pre><br/>
 pollinging proc: {polling_status}<br/>
 <pre>{polling_err_msg}</pre><br/>
+<a href="/docs/">docs</a>
 </body></html>
 '''.format(branch=branch,
            head=head,
@@ -135,4 +152,4 @@ pollinging proc: {polling_status}<br/>
 
 if __name__ == '__main__':
     restart_procs()
-    bottle.run(host='', port=8888, debug=True)
+    bottle.run(host='', port=8888, debug=True, server='gevent')

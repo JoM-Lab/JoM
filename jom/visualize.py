@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 import os
-import matplotlib
-matplotlib.use('agg')
-from matplotlib.ticker import FuncFormatter, MaxNLocator
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
+import datetime
+from wordcloud import WordCloud
 import numpy as np
 from scipy.ndimage import imread
-from scipy.interpolate import spline
-from wordcloud import WordCloud
-import datetime
-
+from scipy.interpolate import interp1d
+import matplotlib; matplotlib.use('agg')
+from matplotlib.ticker import FuncFormatter
+import matplotlib.font_manager as fm
+import matplotlib.pyplot as plt
 plt.xkcd()
 
 
@@ -44,12 +42,15 @@ def plot_trend(kws, cnts, norm_factors, xlbs, metadata):
     # generate colors for each line
     colors = [plt.cm.jet(i) for i in np.linspace(0.1, 0.9, len(kws))]
     for kw, cnt, color in zip(kws, cnts, colors):
-        xs_new = np.linspace(min(xs), max(xs), 100)
         cnt_normalized = [c / nf if nf != 0 else 0
                           for c, nf in zip(cnt, norm_factors)]
         # make it smooth
-        cnt_smooth = spline(xs, cnt_normalized, xs_new)
-        cnt_smooth[cnt_smooth < 0] = 0  # no negative
+        xs_new = np.linspace(min(xs), max(xs), 100)
+        smooth_func = interp1d(xs, cnt_normalized, kind=min(len(xs)-1, 3))
+        # round the decimal to 5
+        cnt_smooth = np.around(smooth_func(xs_new), 5)
+        # no negagive values
+        cnt_smooth[cnt_smooth < 0] = 0
         # limit the word length in legend box
         kw = '{}...'.format(kw[:7]) if len(kw) > 10 else kw
         ax.plot(xs_new, cnt_smooth, '-', label=kw, color=color)
@@ -61,7 +62,7 @@ def plot_trend(kws, cnts, norm_factors, xlbs, metadata):
     # place the legend on the right
     ax.legend(bbox_to_anchor=(1.05, 1.), loc=2, borderaxespad=0.,
               prop=fm.FontProperties(fname=fm.findfont('Source Han Sans CN')))
-    plt.title('{} ngram in {}/{}'.format(', '.join(metadata[0]), *(metadata[1:])))
+    plt.title('{} ngram in {}/{}'.format(', '.join(metadata[0]), *(metadata[1])))
     fig.savefig("trend.png")
 
 
@@ -151,7 +152,7 @@ def gen_word_cloud(freqs):
                   .replace('Regular', 'ExtraLight')
     wc = WordCloud(background_color="white", mask=imread(base_img),
                    font_path=font_path,
-                   max_words=150, max_font_size=30, scale=2  #, random_state=42
+                   max_words=150, max_font_size=30, scale=2  # random_state=42
                    ).generate_from_frequencies(freqs)
     wc.to_file("wordcloud.png")
 
@@ -201,6 +202,6 @@ if __name__ == '__main__':
           (datetime.datetime(2015, 6, 28, 2, 43, 31), datetime.datetime(2015, 6, 28, 6, 57, 32)),
           (datetime.datetime(2015, 6, 29, 2, 43, 31), datetime.datetime(2015, 6, 29, 6, 57, 32)),
           (datetime.datetime(2015, 6, 30, 2, 43, 31), datetime.datetime(2015, 6, 30, 6, 57, 32))]
-    #gen_sleep_png(ts)
+    # gen_sleep_png(ts)
     gen_freq([((2015, 7, 11), 120), ((2015, 7, 12), 37), ((2015, 7, 13), 71), ((2015, 7, 14), 153),
               ((2015, 7, 15), 94), ((2015, 7, 16), 0), ((2015, 7, 17), 9)])

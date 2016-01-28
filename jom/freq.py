@@ -2,7 +2,7 @@
 # coding: utf-8
 from __future__ import unicode_literals, print_function
 from collections import Counter
-from db import new_session, Tweet
+from .db import new_session, Tweet
 import string
 import re
 
@@ -61,3 +61,9 @@ def freq(texts, limit=400, p=12):
                     filt[w[i:i+l]] += v
     # print(results)
     return results
+
+if __name__ == '__main__':
+    session = new_session()
+    texts = [i.text for i in session.query(Tweet.text).filter(Tweet.sender == 'masked')]
+    cnt = freq(texts)
+    print(sorted([(v, k) for k, v in cnt], reverse=True))

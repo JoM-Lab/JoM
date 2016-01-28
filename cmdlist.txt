@@ -10,11 +10,12 @@ remember - /remember person words
 quote - /quote person  [regex1] [-regex2] [!c2] [!p2]
 randq - /randq person - random quote forom a given person
 config - show configuration
-ff - /ff person [1d] [!unfo|!fo|!foed|!unfoed]
 fff - /fff person [1d] [!unfo|!fo|!foed|!unfoed]
 freq - /freq person [7d]
 wordcloud - /wordcloud person
 watch - /watch person +/- [keywords]
 trend - /trend person [7d] [1d] [keywords]
 punchcard - /pc person [7d]
+deleted - /deleted person [regex1] [-regex2] [!c2] [!p2] [!i]
+ids - /ids person1 person2
 help - baka!
